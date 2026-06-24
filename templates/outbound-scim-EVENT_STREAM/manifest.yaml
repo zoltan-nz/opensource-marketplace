@@ -1,0 +1,65 @@
+id: 'd6090a2e-99fb-486d-b747-7429a4b5c563'
+name: 'Outbound SCIM Provisioning'
+description: 'Provisions Auth0 user lifecycle changes (created/updated/deleted) to a downstream SCIM 2.0 server such as Atlassian, AWS IAM Identity Center, Okta, or Workday.'
+public: true
+triggers:
+    - 'EVENT_STREAM'
+useCases:
+    - 'ACTION_FEATURE'
+runtime: 'node22'
+sourceUrl: 'https://github.com/auth0/opensource-marketplace/blob/main/templates/outbound-scim-EVENT_STREAM'
+notes: |
+    **Required Secrets**
+
+    * `SCIM_BASE_URL` - base URL of your SCIM 2.0 endpoint, e.g. `https://api.example.com/scim/v2`
+    * `SCIM_BEARER_TOKEN` - bearer token issued by your SCIM server
+
+    **Optional Secrets - transport**
+
+    * `SCIM_TIMEOUT_MS` - per-request timeout in milliseconds (default: `1500`)
+    * `SCIM_MAX_RETRIES` - retry count on 429 / 5xx / network errors (default: `1`)
+
+    **Optional Secrets - filtering**
+
+    * `SCIM_CONNECTION_ALLOWLIST` - CSV of connection names. When set, the Action
+       only processes events from these connections. Leave unset to process all.
+
+    **Update and delete behavior**
+
+    Updates always use PUT (full-resource replace - `user.updated` carries the full
+    profile; there is no field-level delta on the wire). Deletes always use
+    `DELETE /Users/{id}`; what the destination does with it (hard-delete, tombstone,
+    or deactivate) is the SCIM service provider's concern.
+
+    **Setup**
+
+    1. Subscribe this Action to the events: `user.created`, `user.updated`, `user.deleted`.
+    2. Configure the secrets above.
+    3. Edit `buildScimUser()` in the code if your downstream SCIM server expects
+       different attributes.
+
+    **Notes**
+
+    Event Streams enforces a 10 second Action execution timeout. This template keeps
+    timeout handling simple: each SCIM request has its own timeout, and retry count
+    is fixed by `SCIM_MAX_RETRIES`.
+
+    On uncaught errors this Action throws so Event Streams can redeliver the event
+    per its retry / DLQ policy. Configuration errors (missing required secrets) log
+    an error and return without throwing because retrying will not fix them.
+
+secrets:
+    - label: 'SCIM_BASE_URL'
+      defaultValue: 'https://api.example.com/scim/v2'
+    - label: 'SCIM_BEARER_TOKEN'
+      defaultValue: 'replace-with-your-bearer-token'
+    - label: 'SCIM_TIMEOUT_MS'
+      defaultValue: '1500'
+    # Validator expects minimum of 2 characters, in the code it is translated back to a number.
+    - label: 'SCIM_MAX_RETRIES'
+      defaultValue: '01'
+    # SCIM_CONNECTION_ALLOWLIST is intentionally NOT seeded with a default.
+    # Adding a placeholder here would cause silent broken-by-default behaviour
+    # (the Action would skip every event whose connection name doesn't match
+    # the placeholder). Customers who want allowlist filtering add the secret
+    # via the dashboard.
